@@ -6,6 +6,18 @@
 #define MAXARGC 32 // 指令参数最大数量
 #define HISTSIZE 100
 
+int get_Parameter(char* array[]) {
+    int i = 0;
+    for (; array[i]!=NULL; i++) {
+        if (strcmp(array[i], ">") && strcmp(array[i], ">>") && strcmp(array[i], "<")) {
+            continue;
+        } else {
+            return i;
+        }
+    }
+    return 0;
+}
+
 int main()
 {
     while (1) {
@@ -49,7 +61,8 @@ int main()
             RealInstruction[strlen(RealInstruction)-1] = '\n';
 
             // 将所有指令存入".bash_history"文件中
-            FILE* f = fopen("E:\\OperatingSystem\\.bash_history.txt", "a+");
+            // FILE* f = fopen("E:\\OperatingSystem\\.bash_history.txt", "a+");
+            FILE* f = fopen(".bash_history.txt", "a+");
             if (f == NULL) {
                 exit(1);
             }
@@ -61,7 +74,8 @@ int main()
             chdir(argv[1]);
         } else if (strcmp(argv[0], "history") == 0) {
             if (argv[1] == NULL) {
-                FILE* f1 = fopen("E:\\OperatingSystem\\.bash_history.txt", "r");
+                // FILE* f1 = fopen("E:\\OperatingSystem\\.bash_history.txt", "r");
+                FILE* f1 = fopen(".bash_history.txt", "r");
                 if (f1 == NULL) {
                     exit(1);
                 }
@@ -80,8 +94,21 @@ int main()
             }
         } else if (strcmp(argv[0], "exit") == 0) {
             break;
-        } else {
+        } else if (strcmp(argv[0], "mytop") == 0){
 
+        } else {
+            if (get_Parameter(argv)) {
+                int arrow = get_Parameter(argv);
+                if (!strcmp(argv[arrow], ">")) {
+
+                } else if (!strcmp(argv[arrow], ">>")) {
+
+                } else if (!strcmp(argv[arrow], "<")) {
+                    
+                }
+            } else {
+
+            }
         }
     }
     return 0;
