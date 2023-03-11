@@ -1,26 +1,29 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <unistd.h>
 
-#define MAXSIZE 1024 // 指令最大长度
-#define MAXARGC 32 // 指令参数最大数量
-#define HISTSIZE 100
 
-int get_Parameter(char* array[]) {
-    int i = 0;
-    for (; array[i]!=NULL; i++) {
-        if (strcmp(array[i], ">") && strcmp(array[i], ">>") && strcmp(array[i], "<")) {
-            continue;
-        } else {
-            return i;
-        }
-    }
-    return 0;
-}
+#define MAXSIZE 1024 // 指令最大长度
+#define MAXARGC 128 // 指令参数最大数量
+#define MAXPIPE 128
+
+
+int flag_in, flag_out, flag_add, flag_pipe; // 分别代表"<"，">"，">>"，"|"
+int flag[MAXPIPE][3]; // flag[][0]: 重定向'<' flag[][1]: 重定向'>' flag[][2]: 重定向'>>'
+char *file[MAXPIPE][3]; //  存储重定向前后的指令名  file[][0]: 重定向'<' file[][1]: 重定向'>' file[][2]: 重定向'>>'
+char *Argv[MAXPIPE][MAXARGC];
 
 int main()
 {
     while (1) {
+        flag_in = 0;
+        flag_out = 0;
+        flag_add = 0;
+        flag_pipe = 0;
+        memset(flag, 0, sizeof(flag));
+        memset(file, 0, sizeof(file));
+        memset(Argv, 0, sizeof(Argv));
         char Instruction[MAXSIZE]; // 创建字符数组，用于存放输入的指令
         fgets(Instruction, MAXSIZE, stdin); // 从键盘输入指令
         Instruction[strlen(Instruction)-1] = '\0'; // 确定指令长度，并且将输入的回车设置为'\0'作为字符串的结尾
@@ -31,7 +34,7 @@ int main()
 
         // 将指令的每一个参数分离，并存入argv数组
         while (*pInstruction != '\0') { // 循环终止条件为遍历到指令的最后一个字符'\0'
-            /*
+            /**
              * 字符串中的空格起到分离参数的作用，在本段程序中用于判断是否遍历到有效字符
              * 空格后的第一个字符为参数的起始位置，将字符指针指向该位置时可存储整个参数
              * 在这一参数的最后设置一个'\0'可彻底将此参数与其余参数分离
@@ -48,7 +51,9 @@ int main()
             }
             pInstruction++;
         }
-
+        if (ArgvIndex == 0) {
+            continue; // 无输入则直接准备接收下一条指令
+        }
         argv[ArgvIndex] = NULL; // 设置字符指针数组的终点
 
         if (strcmp(argv[0], "history") != 0) {
@@ -61,7 +66,6 @@ int main()
             RealInstruction[strlen(RealInstruction)-1] = '\n';
 
             // 将所有指令存入".bash_history"文件中
-            // FILE* f = fopen("E:\\OperatingSystem\\.bash_history.txt", "a+");
             FILE* f = fopen(".bash_history.txt", "a+");
             if (f == NULL) {
                 exit(1);
@@ -74,8 +78,7 @@ int main()
             chdir(argv[1]);
         } else if (strcmp(argv[0], "history") == 0) {
             if (argv[1] == NULL) {
-                // FILE* f1 = fopen("E:\\OperatingSystem\\.bash_history.txt", "r");
-                FILE* f1 = fopen(".bash_history.txt", "r");
+                FILE *f1 = fopen(".bash_history.txt", "r");
                 if (f1 == NULL) {
                     exit(1);
                 }
@@ -91,25 +94,72 @@ int main()
                     ch1 = ch;
                 }
                 fclose(f1);
+            } else {
+                int limit = atoi(argv[1]);
+                FILE *f1 = fopen(".bash_history.txt", "r");
+                if (f1 == NULL) {
+                    exit(1);
+                }
+                char ch;
+                int id = 1;
+                printf("%d ", id++);
+                char ch1 = '\0';
+                while ((ch = fgetc(f1)) != EOF && id<=limit) {
+                    if (ch1 == '\n') {
+                        printf("%d ", id++);
+                    }
+                    printf("%c", ch);
+                    ch1 = ch;
+                }
+                printf("\n");
+                fclose(f1);
             }
         } else if (strcmp(argv[0], "exit") == 0) {
             break;
         } else if (strcmp(argv[0], "mytop") == 0){
 
         } else {
-            if (get_Parameter(argv)) {
-                int arrow = get_Parameter(argv);
-                if (!strcmp(argv[arrow], ">")) {
+            int a = 0; // 当前命令参数序号
 
-                } else if (!strcmp(argv[arrow], ">>")) {
-
-                } else if (!strcmp(argv[arrow], "<")) {
-                    
+            // 遍历argv数组，将'<', '>', '>>', '|'提取出来
+            for (int i=0; argv[i] != NULL; i++) {
+                if (strcmp(argv[i], "|") == 0) {
+                    Argv[flag_pipe++][a] = NULL;
+                    a = 0;
+                } else if (strcmp(argv[i], "<") == 0) {
+                    flag[flag_pipe][0] = 1;
+                    file[flag_pipe][0] = argv[i+1];
+                    Argv[flag_pipe][a++] = NULL;
+                } else if (strcmp(argv[i], ">") == 0) {
+                    flag[flag_pipe][1] = 1;
+                    file[flag_pipe][1] = argv[i+1];
+                    Argv[flag_pipe][a++] = NULL;
+                } else if (strcmp(argv[i], ">>") == 0) {
+                    flag[flag_pipe][2] = 1;
+                    file[flag_pipe][2] = argv[i+1];
+                    Argv[flag_pipe][a++] = NULL;
+                } else {
+                    Argv[flag_pipe][a++] = argv[i];
                 }
-            } else {
-
             }
+
+
+            /**
+             * 执行指令
+             */
+             pid_t pid = Fork();
+             if (pid < 0) {
+                 perror("fork error\n");
+                 exit(0);
+             } else if (pid == 0) {
+                
+
+
+             } else {
+                 waitpid(pid, NULL, 0);
+             }
         }
     }
+
     return 0;
 }
