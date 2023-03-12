@@ -66,6 +66,11 @@ int main()
         }
         argv[ArgvIndex] = NULL; // 设置字符指针数组的终点
 
+        int fore = 0;
+        if (strcmp(argv[ArgvIndex-1], "&") == 0) {
+            fore = 1;
+        }
+
         if (strcmp(argv[0], "history") != 0) {
             // 记录所有的指令
             char RealInstruction[MAXSIZE] = {'\0'};
@@ -222,10 +227,11 @@ int main()
                      execvp(Argv[current][0],Argv[current]);
                  }
              } else {
-                 waitpid(pid, NULL, 0);
+                 if (fore == 0) {
+                     waitpid(pid, NULL, 0);
+                 }
              }
         }
     }
-
     return 0;
 }
