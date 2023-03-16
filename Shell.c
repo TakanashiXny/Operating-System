@@ -19,13 +19,14 @@ char *Argv[MAXPIPE][MAXARGC];
 char *fShare = "temp.txt"; // 共享文件
 pid_t pid;
 
-void sigcat(){
+void sigcat() {
     kill(pid,SIGINT);
 }
 
 int main()
 {
     while (1) {
+        printf("$ ");
         signal(SIGINT, &sigcat);
         flag_in = 0;
         flag_out = 0;
@@ -71,6 +72,15 @@ int main()
             fore = 1;
         }
 
+        // 记录所有的指令
+        char RealInstruction[MAXSIZE] = {'\0'};
+        for (int i=0; argv[i] != NULL; i++) {
+            strcat(RealInstruction, argv[i]);
+            strcat(RealInstruction, " ");
+        }
+        RealInstruction[strlen(RealInstruction)-1] = '\n';
+
+
         if (strcmp(argv[0], "history") != 0) {
             // 记录所有的指令
             char RealInstruction[MAXSIZE] = {'\0'};
@@ -80,13 +90,28 @@ int main()
             }
             RealInstruction[strlen(RealInstruction)-1] = '\n';
 
+            char buf[MAXSIZE];
+            int i = 0;
+            char ch;
+            FILE *f = fopen(".bash_history.txt", "r");
+            if (f == NULL) {
+                exit(1);
+            }
+            while ((ch = fgetc(f)) != EOF) {
+                buf[i++] = ch;
+            }
+            buf[i] = '\0';
+            fclose(f);
+
             // 将所有指令存入".bash_history"文件中
-            FILE* f = fopen(".bash_history.txt", "a+");
+            f = fopen(".bash_history.txt", "w");
             if (f == NULL) {
                 exit(1);
             }
             fprintf(f, "%s", RealInstruction);
+            fprintf(f, "%s", buf);
             fclose(f);
+
         }
 
         if (strcmp(argv[0], "cd") == 0) {
@@ -117,12 +142,17 @@ int main()
                 }
                 char ch;
                 int id = 1;
-                printf("%d ", id++);
+                printf("%d ", id);
                 char ch1 = '\0';
                 while ((ch = fgetc(f1)) != EOF && id<=limit) {
                     if (ch1 == '\n') {
-                        printf("%d ", id++);
+                        id++;
+                        if (id > limit) {
+                            break;
+                        }
+                        printf("%d ", id);
                     }
+                    
                     printf("%c", ch);
                     ch1 = ch;
                 }
@@ -131,7 +161,7 @@ int main()
             }
         } else if (strcmp(argv[0], "exit") == 0) {
             break;
-        } else if (strcmp(argv[0], "mytop") == 0){
+        } else if (strcmp(argv[0], "mytop") == 0) {
 
         } else {
             int a = 0; // 当前命令参数序号
