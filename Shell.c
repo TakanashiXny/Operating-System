@@ -16,6 +16,8 @@ int flag_in, flag_out, flag_add, flag_pipe; // 分别代表"<"，">"，">>"，"|
 int flag[MAXPIPE][3]; // flag[][0]: 重定向'<' flag[][1]: 重定向'>' flag[][2]: 重定向'>>'
 char *file[MAXPIPE][3]; // 存储重定向前后的指令名  file[][0]: 重定向'<' file[][1]: 重定向'>' file[][2]: 重定向'>>'
 char *Argv[MAXPIPE][MAXARGC];
+char *argv[MAXARGC]; // 创建字符指针数组，每个元素为指向一个字符串的指针
+int argvNum;
 char *fShare = "temp.txt"; // 共享文件
 pid_t pid;
 
@@ -24,41 +26,148 @@ void sigcat() {
     kill(pid,SIGINT);
 }
 
-void commandPipe(int current) {
-    if (current == flag_pipe) {
-        return ;
+void commandNoPipe(int left, int right) {
+    // 判断重定向
+    int in = 0;
+    int out = 0;
+    int add = 0;
+    char *inFile = NULL;
+    char *outFile = NULL;
+    char *addFile = NULL;
+    int endIdx = right;
+
+    for (int i=left; i<right; i++) {
+        if (strcmp(argv[i], "<") == 0) {
+            in++;
+            if (i+1 < right) {
+                inFile = argv[i+1];
+            } else {
+                perror("missing parameter");
+                exit(0);
+            }
+            if (endIdx == right) {
+                endIdx = i;
+            }
+        } else if (strcmp(argv[i], ">") == 0) {
+            out++;
+            if (i+1 < right) {
+                outFile = argv[i + 1];
+            } else {
+                perror("missing parameter");
+                exit(0);
+            }
+            if (endIdx == right) {
+                endIdx = i;
+            }
+        } else if (strcmp(argv[i], ">>") == 0) {
+            add++;
+            if (i+1 < right) {
+                addFile = argv[i + 1];
+            } else {
+                perror("missing parameter");
+                exit(0);
+            }
+            if (endIdx == right) {
+                endIdx = i;
+            }
+        }
+    }
+
+    // 重定向
+    if (in > 1) {
+        perror("too much in");
+        exit(0);
+    }
+    if (out > 1) {
+        perror("too much out");
+        exit(0);
+    }
+    if (add > 1) {
+        perror("too much add");
+        exit(0);
     }
     pid_t pid1 = fork();
-    int fd[2];
-    pipe(fd);
-    if (pid1 < 0) {
-        perror("fork error\n");
+    if (pid1 == -1) {
+        perror("fork error");
         exit(0);
     } else if (pid1 == 0) {
-        close(fd[1]);
-        dup(fd[0]);
-        close(fd[0]);
-        commandPipe(current+1);
-        exit(0);
-    } else {
-        close(fd[0]);
-        dup(fd[1]);
-        close(fd[1]);
-        if (flag[current][0] != 0) {
-            int fd2 = open(file[current][0], O_RDONLY);
+        int fd;
+        if (in == 1) {
+            close(0);
+            fd = open(inFile, O_RDONLY);
         }
-        if (flag[current][1] != 0) {
-            int fd2=open(file[current][1],O_WRONLY|O_CREAT|O_TRUNC,0666);
+        if (out == 1) {
+            close(1);
+            fd = open(outFile, O_WRONLY|O_CREAT|O_TRUNC, 0666);
         }
-        if (flag[current][2] != 0) {
-            int fd2=open(file[current][1],O_WRONLY|O_CREAT|O_APPEND,0666);
+        if (add == 1) {
+            close(1);
+            fd = open(addFile, O_WRONLY|O_CREAT|O_APPEND, 0666);
         }
-        if (execvp(Argv[current][0],Argv[current]) == -1) {
+        char *com[MAXSIZE];
+        for (int i=left; i<endIdx; i++) {
+            com[i] = argv[i];
+        }
+        com[endIdx] = NULL;
+        if (execvp(com[left], com+left) == -1) {
             perror("execvp error!\n");
             exit(0);
         }
+
+    } else {
+        int status;
+        waitpid(pid1, &status, 0);
+    }
+    return;
+}
+
+void commandPipe(int left, int right) {
+    if (left >= right) {
+        return;
+    }
+    // 判断有无管道
+    int pipeIdx = -1;
+    for (int i=left; i<right; i++) {
+        if (strcmp(argv[i], "|") == 0) {
+            pipeIdx = i;
+            break;
+        }
+    }
+    if (pipeIdx == -1) {
+        commandNoPipe(left, right);
+    } else if (pipeIdx+1 == right) {
+        perror("missing parameter");
+        exit(0);
+    } else {
+        int fd[2];
+        if (pipe(fd) == -1) {
+            perror("pipe error");
+            exit(0);
+        }
+        pid_t pid1 = fork();
+        if (pid1 == -1) {
+            perror("fork error");
+            exit(0);
+        } else if (pid1 == 0) {
+            close(fd[0]);
+            dup2(fd[1], STDOUT_FILENO);
+            close(fd[1]);
+            commandNoPipe(left, pipeIdx);
+            exit(0);
+        } else {
+            int status;
+            waitpid(pid1, &status, 0);
+            if (pipeIdx+1 < right) {
+                close(fd[1]);
+                dup2(fd[0], STDIN_FILENO);
+                close(fd[0]);
+                commandPipe(pipeIdx+1, right);
+            }
+        }
     }
 }
+
+
 
 int main()
 {
@@ -72,11 +181,12 @@ int main()
         memset(flag, 0, sizeof(flag));
         memset(file, 0, sizeof(file));
         memset(Argv, 0, sizeof(Argv));
+        memset(argv, 0, sizeof(argv));
+        argvNum = 0;
         char Instruction[MAXSIZE]; // 创建字符数组，用于存放输入的指令
         fgets(Instruction, MAXSIZE, stdin); // 从键盘输入指令
         Instruction[strlen(Instruction)-1] = '\0'; // 确定指令长度，并且将输入的回车设置为'\0'作为字符串的结尾
 
-        char *argv[MAXARGC]; // 创建字符指针数组，每个元素为指向一个字符串的指针
         int ArgvIndex = 0;
         char *pInstruction = Instruction;
 
@@ -257,13 +367,17 @@ int main()
                         exit(0);
                     }
                 } else {
-                    int current = 0;
-                    commandPipe(0);
+                    int inFd = dup(STDIN_FILENO);
+                    int outFd = dup(STDOUT_FILENO);
+                    commandPipe(0, ArgvIndex);
+                    dup2(inFd, STDIN_FILENO);
+                    dup2(outFd, STDOUT_FILENO);
+                    exit(0);
+
                 }
             } else {
-                if (fore == 0) {
-                    waitpid(pid, NULL, 0);
-                }
+                int status;
+                waitpid(pid, &status, 0);
             }
         }
     }
