@@ -14,13 +14,50 @@
 
 int flag_in, flag_out, flag_add, flag_pipe; // 分别代表"<"，">"，">>"，"|"
 int flag[MAXPIPE][3]; // flag[][0]: 重定向'<' flag[][1]: 重定向'>' flag[][2]: 重定向'>>'
-char *file[MAXPIPE][3]; //  存储重定向前后的指令名  file[][0]: 重定向'<' file[][1]: 重定向'>' file[][2]: 重定向'>>'
+char *file[MAXPIPE][3]; // 存储重定向前后的指令名  file[][0]: 重定向'<' file[][1]: 重定向'>' file[][2]: 重定向'>>'
 char *Argv[MAXPIPE][MAXARGC];
 char *fShare = "temp.txt"; // 共享文件
 pid_t pid;
 
+
 void sigcat() {
     kill(pid,SIGINT);
+}
+
+void commandPipe(int current) {
+    if (current == flag_pipe) {
+        return ;
+    }
+    pid_t pid1 = fork();
+    int fd[2];
+    pipe(fd);
+    if (pid1 < 0) {
+        perror("fork error\n");
+        exit(0);
+    } else if (pid1 == 0) {
+        close(fd[1]);
+        dup(fd[0]);
+        close(fd[0]);
+        commandPipe(current+1);
+        exit(0);
+    } else {
+        close(fd[0]);
+        dup(fd[1]);
+        close(fd[1]);
+        if (flag[current][0] != 0) {
+            int fd2 = open(file[current][0], O_RDONLY);
+        }
+        if (flag[current][1] != 0) {
+            int fd2=open(file[current][1],O_WRONLY|O_CREAT|O_TRUNC,0666);
+        }
+        if (flag[current][2] != 0) {
+            int fd2=open(file[current][1],O_WRONLY|O_CREAT|O_APPEND,0666);
+        }
+        if (execvp(Argv[current][0],Argv[current]) == -1) {
+            perror("execvp error!\n");
+            exit(0);
+        }
+    }
 }
 
 int main()
@@ -117,6 +154,9 @@ int main()
         if (strcmp(argv[0], "cd") == 0) {
             chdir(argv[1]);
         } else if (strcmp(argv[0], "history") == 0) {
+            /**
+             * history函数
+             */
             if (argv[1] == NULL) {
                 FILE *f1 = fopen(".bash_history.txt", "r");
                 if (f1 == NULL) {
@@ -159,6 +199,7 @@ int main()
                 printf("\n");
                 fclose(f1);
             }
+
         } else if (strcmp(argv[0], "exit") == 0) {
             break;
         } else if (strcmp(argv[0], "mytop") == 0) {
@@ -192,75 +233,38 @@ int main()
             /**
              * 执行指令
              */
-             pid = fork();
-             if (pid < 0) {
-                 perror("fork error\n");
-                 exit(0);
-             } else if (pid == 0) {
-                 // 没有管道
-                 if (flag_pipe == 0) {
-                     if (flag[0][0] != 0) {
-                         close(0);
-                         int fd = open(file[0][0], O_RDONLY);
-                     }
-                     if (flag[0][1] != 0) {
-                         close(1);
-                         int fd2 = open(file[0][1], O_WRONLY|O_CREAT|O_TRUNC, 0666);
-                     }
-                     if (flag[0][2] != 0) {
-                         close(1);
-                         int fd3 = open(file[0][2], O_WRONLY|O_CREAT|O_APPEND, 0666);
-                     }
-                     execvp(Argv[0][0], Argv[0]);
-                 } else {
-                     // 有管道
-                     int current = 0; // 记录当前命令序号
-                     for (; current<=flag_pipe; current++) {
-                         pid_t pid2 = fork();
-                         if (pid2 < 0) {
-                             perror("fork error\n");
-                             exit(0);
-                         } else if (pid2 == 0) {
-                            if (current != 0) {
-                                close(0);
-                                int fd = open(fShare, O_RDONLY);
-                            }
-                            if (flag[current][0] != 0) {
-                                close(0);
-                                int fd = open(file[current][0], O_RDONLY);
-                            }
-                            if (flag[current][1] != 0) {
-                                close(1);
-                                int fd=open(file[current][1],O_WRONLY|O_CREAT|O_TRUNC,0666);
-                            }
-                            if (flag[current][2] != 0) {
-                                close(1);
-                                int fd=open(file[current][1],O_WRONLY|O_CREAT|O_APPEND,0666);
-                            }
-                            close(1);
-                            remove(fShare);
-                            int fd=open(fShare,O_WRONLY|O_CREAT|O_TRUNC,0666);
-                            if(execvp(Argv[current][0],Argv[current])==-1) {
-                                perror("execvp error!\n");
-                                exit(0);
-                            }
-                         } else {
-                             waitpid(pid2, NULL, 0);
-                         }
-                     }
-                     close(0);
-                     int fd=open(fShare,O_RDONLY);//输入重定向
-                     if(flag[current][1]) {
-                         close(1);
-                         int fd=open(file[current][1],O_WRONLY|O_CREAT|O_TRUNC,0666);
-                     }
-                     execvp(Argv[current][0],Argv[current]);
-                 }
-             } else {
-                 if (fore == 0) {
-                     waitpid(pid, NULL, 0);
-                 }
-             }
+            pid = fork();
+            if (pid < 0) {
+                perror("fork error\n");
+                exit(0);
+            } else if (pid == 0) {
+                // 没有管道
+                if (flag_pipe == 0) {
+                    if (flag[0][0] != 0) {
+                        close(0);
+                        int fd = open(file[0][0], O_RDONLY);
+                    }
+                    if (flag[0][1] != 0) {
+                        close(1);
+                        int fd2 = open(file[0][1], O_WRONLY|O_CREAT|O_TRUNC, 0666);
+                    }
+                    if (flag[0][2] != 0) {
+                        close(1);
+                        int fd3 = open(file[0][2], O_WRONLY|O_CREAT|O_APPEND, 0666);
+                    }
+                    if (execvp(Argv[0][0], Argv[0]) == -1) {
+                        perror("execvp error!\n");
+                        exit(0);
+                    }
+                } else {
+                    int current = 0;
+                    commandPipe(0);
+                }
+            } else {
+                if (fore == 0) {
+                    waitpid(pid, NULL, 0);
+                }
+            }
         }
     }
     return 0;
