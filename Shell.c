@@ -235,9 +235,9 @@ int main()
         }
         argv[ArgvIndex] = NULL; // 设置字符指针数组的终点
 
-        int fore = 0;
+        int back = 0;
         if (strcmp(argv[ArgvIndex-1], "&") == 0) {
-            fore = 1;
+            back = 1;
         }
 
         // 记录所有的指令
@@ -299,40 +299,57 @@ int main()
              * 执行指令
              */
             pid = fork();
+            if (back == 1) {
+                signal(SIGCHLD, SIG_IGN);
+            }
             if (pid < 0) {
                 perror("fork error\n");
                 exit(0);
             } else if (pid == 0) {
-                // 没有管道
-                if (flag_pipe == 0) {
-                    if (flag[0][0] != 0) {
-                        close(0);
-                        int fd = open(file[0][0], O_RDONLY);
-                    }
-                    if (flag[0][1] != 0) {
-                        close(1);
-                        int fd2 = open(file[0][1], O_WRONLY|O_CREAT|O_TRUNC, 0666);
-                    }
-                    if (flag[0][2] != 0) {
-                        close(1);
-                        int fd3 = open(file[0][2], O_WRONLY|O_CREAT|O_APPEND, 0666);
-                    }
-                    if (execvp(Argv[0][0], Argv[0]) == -1) {
-                        perror("execvp error!\n");
+                if (back == 0) {
+                    // 没有管道
+                    if (flag_pipe == 0) {
+                        if (flag[0][0] != 0) {
+                            close(0);
+                            int fd = open(file[0][0], O_RDONLY);
+                        }
+                        if (flag[0][1] != 0) {
+                            close(1);
+                            int fd2 = open(file[0][1], O_WRONLY|O_CREAT|O_TRUNC, 0666);
+                        }
+                        if (flag[0][2] != 0) {
+                            close(1);
+                            int fd3 = open(file[0][2], O_WRONLY|O_CREAT|O_APPEND, 0666);
+                        }
+                        if (execvp(Argv[0][0], Argv[0]) == -1) {
+                            perror("execvp error!\n");
+                            exit(0);
+                        }
+                    } else {
+                        int inFd = dup(STDIN_FILENO);
+                        int outFd = dup(STDOUT_FILENO);
+                        commandPipe(0, ArgvIndex);
+                        dup2(inFd, STDIN_FILENO);
+                        dup2(outFd, STDOUT_FILENO);
                         exit(0);
                     }
                 } else {
-                    int inFd = dup(STDIN_FILENO);
-                    int outFd = dup(STDOUT_FILENO);
-                    commandPipe(0, ArgvIndex);
-                    dup2(inFd, STDIN_FILENO);
-                    dup2(outFd, STDOUT_FILENO);
+                    close(0);
+                    int fd1 = open("/dev/null", O_RDONLY);
+                    dup2(fd1, 0);
+                    close(1);
+                    int fd2 = open("/dev/null", O_WRONLY);
+                    dup2(fd2, 0);
+                    dup2(fd1, 2);
+                    signal(SIGCHLD, SIG_IGN);
+                    execvp(argv[0], argv);
                     exit(0);
-
                 }
             } else {
-                int status;
-                waitpid(pid, &status, 0);
+                if (back == 0) {
+                    int status;
+                    waitpid(pid, &status, 0);
+                }
             }
         }
     }
